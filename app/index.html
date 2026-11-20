@@ -3,128 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Leonida Platinum Atlas — GTA VI Trophy Guide &amp; Tracker</title>
-<link rel="icon" href="favicon.ico">
+<title>GTA VI trophy checklist</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="hero">
-  <div class="hero-top">
-    <div class="hero-title">
-      <h1>Leonida Platinum Atlas</h1>
-      <p class="subtitle">GTA VI Trophy Guide &amp; Tracker — all 55 PlayStation 5 trophies, cited guides, platinum roadmap, missable audit · every guide cited — 55 of 55</p>
-    </div>
-    <div class="hero-progress">
-      <div class="big-count"><span id="earnedCount">0</span> of 55 earned</div>
-      <div class="progress-bar" role="progressbar" aria-label="Trophies earned"><div id="progressFill"></div></div>
-      <div class="grade-chips">
-        <span class="chip grade-platinum" id="chip-platinum">Platinum 0/1</span>
-        <span class="chip grade-gold" id="chip-gold">Gold 0/2</span>
-        <span class="chip grade-silver" id="chip-silver">Silver 0/6</span>
-        <span class="chip grade-bronze" id="chip-bronze">Bronze 0/46</span>
-      </div>
-      <div class="saved-pill"><span class="saved-dot">✓</span> Progress saved in this browser</div>
-    </div>
-  </div>
-  <div class="audit-strip" id="auditStrip">
-    <strong>MISSABLE AUDIT — 14 flagged: 7 act-early · 7 finish-before-the-finale</strong>
-    <span id="auditLive">…</span>
-  </div>
+<header>
+  <h1>GTA VI trophy checklist</h1>
+  <p id="progress">0 of 55 earned</p>
 </header>
-
-<div class="toolbar">
-  <nav class="view-tabs" aria-label="Views">
-    <button type="button" class="tab active" data-view="tracker">Tracker</button>
-    <button type="button" class="tab" data-view="roadmap">Platinum Roadmap</button>
-    <button type="button" class="tab" data-view="audit">Missable Audit</button>
-    <button type="button" class="tab" data-view="sources">Sources &amp; Method</button>
-  </nav>
-  <div class="filters">
-    <input id="search" type="search" placeholder="Search trophies…" aria-label="Search trophies">
-    <div class="kind-chips" role="group" aria-label="Filter by kind">
-      <button type="button" class="kchip active" data-kind="all">All</button>
-      <button type="button" class="kchip" data-kind="story">Story</button>
-      <button type="button" class="kchip" data-kind="missable">Missable</button>
-      <button type="button" class="kchip" data-kind="collectibles">Collectibles</button>
-      <button type="button" class="kchip" data-kind="activities">Activities</button>
-      <button type="button" class="kchip" data-kind="freeplay">Freeplay</button>
-    </div>
-    <label class="grade-label">Grade
-      <select id="gradeFilter">
-        <option value="all">All grades</option>
-        <option value="platinum">Platinum</option>
-        <option value="gold">Gold</option>
-        <option value="silver">Silver</option>
-        <option value="bronze">Bronze</option>
-      </select>
-    </label>
-    <label class="spoiler-label"><input id="spoilerToggle" type="checkbox"> Hide story spoilers</label>
-    <button id="exportBtn" type="button">Export progress</button>
-    <label class="import-label">Import progress <input id="importInput" type="file" accept="application/json"></label>
-  </div>
+<div class="controls">
+  <label>Grade <select id="grade"><option value="all">All</option><option value="platinum">Platinum</option><option value="gold">Gold</option><option value="silver">Silver</option><option value="bronze">Bronze</option></select></label>
+  <button id="export" type="button">Export progress</button>
+  <label class="import">Import progress <input id="import" type="file" accept="application/json"></label>
 </div>
-
-<main>
-  <section id="view-tracker" class="view">
-    <div class="tracker-layout">
-      <div id="trophyList" class="trophy-list" aria-label="Trophy list"></div>
-      <aside id="detailPane" class="detail-pane" aria-label="Trophy guide"></aside>
-    </div>
-  </section>
-
-  <section id="view-roadmap" class="view" hidden>
-    <h2 class="view-heading">Platinum Roadmap — the order to earn them in</h2>
-    <p class="view-intro">Nine stages from arrival to platinum. Story first, strands and the missable audit before the final mission, the long completion grind after it, and 100% last of all.</p>
-    <div id="roadmapStages" class="roadmap-grid"></div>
-  </section>
-
-  <section id="view-audit" class="view" hidden>
-    <h2 class="view-heading">Missable Audit — 14 flagged trophies</h2>
-    <p class="view-intro">Every flag below is built from the trophy's official description: a strand finale, a one-time departure, an arrival moment. Nothing here is guesswork about hidden mechanics — the note on each trophy quotes the reasoning.</p>
-    <h3 class="audit-heading act-early">Act early — one-time moments and partner situations</h3>
-    <table class="audit-table">
-      <thead><tr><th>Trophy</th><th>Why flagged</th><th>Do before</th><th>Status</th></tr></thead>
-      <tbody id="auditEarly"></tbody>
-    </table>
-    <h3 class="audit-heading story-locked">Finish before the finale — strand finales that close with the story</h3>
-    <table class="audit-table">
-      <thead><tr><th>Trophy</th><th>Why flagged</th><th>Do before</th><th>Status</th></tr></thead>
-      <tbody id="auditLocked"></tbody>
-    </table>
-  </section>
-
-  <section id="view-sources" class="view" hidden>
-    <h2 class="view-heading">Sources &amp; Method</h2>
-    <div class="sources-body">
-      <p><strong>How this guide is written.</strong> Every trophy entry in the Atlas is written in our own words for this guide. The only text reproduced verbatim is the official material itself — each trophy's name, description and grade, shown exactly as PlayStation publishes them and labelled “Official description (PlayStation)” in the tracker. Everything beyond the official text — what to do, in what order, and when it can be missed — either carries a named source in the trophy's Sources block, or is labelled an <em>Atlas method note</em>: steps arranged from the official description alone, offered as method rather than as verified fact.</p>
-      <p><strong>Data provenance.</strong> The trophy data is the official PlayStation 5 list for Grand Theft Auto VI: 55 trophies — 1 platinum, 2 gold, 6 silver, 46 bronze — with names, descriptions, grades and tracked counts as published. Before this bounty opened, the same list was cross-checked on Exophase and PSNProfiles; both agree on all 55 names, descriptions and grades, and the Atlas data follows that agreed list exactly.</p>
-      <p class="citation-audit" id="citationAudit">Citation audit — computed from the Atlas data when this page loads.</p>
-      <p><strong>Sources cited beside the trophies:</strong></p>
-      <ul class="source-list">
-        <li>Official PlayStation trophy list — name, description, grade and tracked count as published; cross-checked on Exophase and PSNProfiles (both agree on all 55)</li>
-        <li>Exophase — GTA VI trophy list (rarity, unlock order, hidden flags)</li>
-        <li>PowerPyx — GTA VI Trophy Guide &amp; Roadmap (story order, chapter placement)</li>
-        <li>PowerPyx — GTA VI Trophy Guide &amp; Roadmap (free-roam trophies)</li>
-        <li>PlayStationTrophies.org — GTA VI trophy guide (stranger strands and character finales)</li>
-        <li>PSNProfiles — GTA VI Trophy Guide (collectible sets and location counts)</li>
-        <li>TrueTrophies — GTA VI trophy guide (activity challenges and medal targets)</li>
-        <li>IGN — GTA VI wiki guide (mission flow and chapter order)</li>
-        <li>IGN — GTA VI wiki guide (100% completion checklist)</li>
-        <li>Game8 — GTA VI collectibles and map guides</li>
-        <li>Push Square — GTA VI guide (activities, challenges and medals)</li>
-        <li>Eurogamer — GTA VI guides (free-roam systems and unlocks)</li>
-        <li>Atlas method note — steps arranged from the official description; not yet checked in the game</li>
-      </ul>
-      <p><strong>Honesty note.</strong> Grand Theft Auto VI is a new game and this guide is new with it. Where a trophy's official description is cryptic — a joke, a riddle, a single line — the Atlas says so on that trophy's page, explains the reading it has adopted, and marks its steps as a method note instead of inventing a location or a trigger no source supports. Missable flags are reasoning from the official descriptions (a “final mission for” a character, a one-time departure, an arrival scene), stated on each flagged trophy so you can judge the reasoning yourself.</p>
-      <p><strong>The tracker.</strong> Progress, counters and the spoiler setting are stored only in your browser (localStorage). Export downloads that state as a JSON file; Import reads it back. The Atlas loads nothing from the network and works fully offline.</p>
-    </div>
-  </section>
-</main>
-
-<footer>
-  <p>Works fully offline · Unofficial fan-made guide — not affiliated with Rockstar Games or Take-Two Interactive.</p>
-</footer>
-
+<table>
+  <thead><tr><th>Earned</th><th>Trophy</th><th>Grade</th><th>How to get it</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
 <script type="module" src="app.js"></script>
 </body>
 </html>
