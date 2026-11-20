@@ -1,118 +1,88 @@
-// shots.mjs — takes the four entry screenshots listed in shots.json by driving the
-// cached Chromium over CDP against the app served by serve.ts. JPEG quality starts
-// at 72 and steps down until each file fits the gate's 262,144-byte cap.
-// Run: node shots.mjs
-import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { launchBrowser, sleep, waitFor } from './cdp.mjs';
+// Takes the entry's 4 screenshots with the cached Chromium over CDP — real renders of the app at 1280x800,
+// JPEG, each at most 262,144 bytes (quality steps down until it fits). Run: node shots.mjs
+import { writeFileSync, statSync } from 'node:fs';
+import { serveApp, launchBrowser, newPage } from './cdp.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const PORT = 8141;
+const PORT = 8912;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const STORAGE_KEY = 'leonida-platinum-atlas-v1';
+const KEY = 'leonida-platinum-atlas-v1';
 const MAX_BYTES = 262144;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const shots = JSON.parse(readFileSync(join(here, 'shots.json'), 'utf8'));
-
-function startServer() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('node', ['serve.ts', '--port', String(PORT)], {
-      cwd: here, stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const timer = setTimeout(() => reject(new Error('server start timed out')), 15000);
-    proc.stdout.on('data', (d) => {
-      if (String(d).includes('app/ is on')) { clearTimeout(timer); resolve(proc); }
-    });
-    proc.on('exit', (code) => { clearTimeout(timer); reject(new Error(`server exited: ${code}`)); });
-  });
-}
-
-async function capture(page, file) {
-  for (const quality of [72, 64, 56, 48, 40]) {
-    const shot = await page.send('Page.captureScreenshot', {
-      format: 'jpeg', quality, captureBeyondViewport: false,
-    });
-    const bytes = Buffer.from(shot.data, 'base64');
-    if (bytes.length <= MAX_BYTES) {
-      writeFileSync(join(here, 'screenshots', file), bytes);
-      return { bytes: bytes.length, quality };
+async function shoot(page, file) {
+  for (const quality of [72, 62, 52, 42]) {
+    const shot = await page.send('Page.captureScreenshot', { format: 'jpeg', quality, fromSurface: true });
+    const buf = Buffer.from(shot.data, 'base64');
+    if (buf.length <= MAX_BYTES) {
+      writeFileSync(new URL(`./screenshots/${file}`, import.meta.url), buf);
+      console.log(`${file}: ${buf.length} bytes (quality ${quality})`);
+      return;
     }
-    if (quality === 40) {
-      writeFileSync(join(here, 'screenshots', file), bytes);
-      return { bytes: bytes.length, quality, over: true };
-    }
+    console.log(`${file}: ${buf.length} bytes at quality ${quality} — too big, retrying lower`);
   }
+  throw new Error(`${file} still over ${MAX_BYTES} bytes at the lowest quality`);
 }
 
-async function applyScroll(page, shot) {
-  if (shot.scrollToRow) {
-    await page.evaluate(`(() => {
-      const row = document.querySelector('.trophy-row[data-trophy-id="${shot.scrollToRow}"]');
-      const y = row.getBoundingClientRect().top + window.scrollY - 110;
-      window.scrollTo(0, Math.max(0, y));
-    })()`);
-  } else if (shot.scroll === 'roadmap-audit') {
-    await page.evaluate(`(() => {
-      const audit = document.querySelector('#audit');
-      const y = audit.getBoundingClientRect().top + window.scrollY - 400;
-      window.scrollTo(0, Math.max(0, y));
-    })()`);
-  } else if (shot.scroll === 'checklist') {
-    await page.evaluate(`document.querySelector('#checklist').scrollIntoView()`);
-  } else {
-    await page.evaluate('window.scrollTo(0, 0)');
-  }
-  await sleep(250);
-}
-
-async function frameCheck(page, shot) {
-  // Report which key elements intersect the viewport, to confirm composition.
-  return page.evaluate(`(() => {
-    const vis = (sel) => [...document.querySelectorAll(sel)].some((n) => {
-      const r = n.getBoundingClientRect();
-      return r.bottom > 0 && r.top < window.innerHeight;
+async function openSeeded(browser, seed) {
+  const page = await newPage(browser);
+  if (seed) {
+    await page.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(seed))});`,
     });
-    return {
-      header: vis('.site-header'),
-      controls: vis('.controls'),
-      stageCard: vis('.stage-card'),
-      auditRow: vis('.audit-row'),
-      citation: vis('#citation-audit'),
-      spoilerNote: vis('#spoiler-note'),
-      trophyRow: vis('.trophy-row'),
-      counter: vis('.counter'),
-      sourcesLine: vis('.sources-line'),
-      maskedRow: [...document.querySelectorAll('.trophy-name')].some((n) => n.textContent.includes('spoilers hidden')),
-    };
-  })()`);
+  }
+  await page.send('Page.navigate', { url: ORIGIN + '/' });
+  await page.waitFor(`document.querySelectorAll('.trophy-row').length === 55`);
+  await sleep(300);
+  return page;
 }
 
-const server = await startServer();
+const topOf = (page, selector) =>
+  page.evaluate(`(() => { const r = document.querySelector('${selector}').getBoundingClientRect(); return Math.round(r.top + window.scrollY); })()`);
+
+const server = await serveApp(PORT);
 const browser = await launchBrowser();
 try {
-  const page = await browser.newPage();
-  await page.send('Emulation.setDeviceMetricsOverride', {
-    width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
-  });
-  for (const shot of shots) {
-    await page.send('Page.navigate', { url: ORIGIN + shot.path });
-    await waitFor(page, 'document.querySelectorAll(".trophy-row").length === 55');
-    // Deterministic state per shot: seeded, or cleared back to first-load defaults.
-    if (shot.seed) {
-      await page.evaluate(`localStorage.setItem('${STORAGE_KEY}', ${JSON.stringify(JSON.stringify(shot.seed))})`);
-    } else {
-      await page.evaluate(`localStorage.removeItem('${STORAGE_KEY}')`);
-    }
-    await page.send('Page.reload');
-    await waitFor(page, 'document.querySelectorAll(".trophy-row").length === 55');
-    await applyScroll(page, shot);
-    const result = await capture(page, shot.file);
-    const frame = await frameCheck(page, shot);
-    console.log(`${shot.file}: ${result.bytes} bytes @ q${result.quality}${result.over ? ' (OVER CAP)' : ''} frame=${JSON.stringify(frame)}`);
+  // 1 — cover: default first load, top of page.
+  {
+    const page = await openSeeded(browser, null);
+    await page.evaluate(`window.scrollTo(0, 0)`);
+    await sleep(200);
+    await shoot(page, '1-cover.jpg');
+    page.close();
+  }
+  // 2 — roadmap cards on top, missable audit in frame below; spoilers revealed so chips show names.
+  {
+    const page = await openSeeded(browser, { checked: [], counters: {}, hideSpoilers: false });
+    const auditTop = await topOf(page, '#audit');
+    await page.evaluate(`window.scrollTo(0, ${Math.max(0, auditTop - 470)})`);
+    await sleep(250);
+    await shoot(page, '2-roadmap.jpg');
+    page.close();
+  }
+  // 3 — checklist mid-progress: seeded checks and counters, a counted row in frame.
+  {
+    const page = await openSeeded(browser, { checked: [1, 2, 3], counters: { 9: 4, 12: 9 }, hideSpoilers: false });
+    const rowTop = await topOf(page, '.trophy-row[data-id="9"]');
+    await page.evaluate(`window.scrollTo(0, ${Math.max(0, rowTop - 150)})`);
+    await sleep(250);
+    await shoot(page, '3-audit.jpg');
+    page.close();
+  }
+  // 4 — spoiler protection on at the checklist, masked story rows and the explaining note.
+  {
+    const page = await openSeeded(browser, { checked: [], counters: {}, hideSpoilers: true });
+    const listTop = await topOf(page, '#checklist');
+    await page.evaluate(`window.scrollTo(0, ${Math.max(0, listTop - 14)})`);
+    await sleep(250);
+    await shoot(page, '4-spoiler.jpg');
+    page.close();
   }
 } finally {
-  await browser.close();
+  browser.proc.kill('SIGKILL');
   server.kill('SIGKILL');
+}
+
+for (const f of ['1-cover.jpg', '2-roadmap.jpg', '3-audit.jpg', '4-spoiler.jpg']) {
+  const size = statSync(new URL(`./screenshots/${f}`, import.meta.url)).size;
+  console.log(`final ${f}: ${size} bytes ${size <= MAX_BYTES ? '(within cap)' : '(OVER CAP)'}`);
 }

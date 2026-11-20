@@ -8,22 +8,22 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="site-header">
-  <div class="header-main">
+<header class="site-head">
+  <div class="head-main">
     <h1>Leonida Platinum Atlas</h1>
-    <p class="subtitle">A guide &amp; tracker for the official 55-trophy list of Grand Theft Auto VI (PlayStation 5) — every trophy with its official name, description and grade, a cited guide in our own words, a nine-stage roadmap to the platinum, and a full missable audit.</p>
+    <p class="subtitle">An offline guide &amp; tracker for the official 55-trophy list of Grand Theft Auto VI (PlayStation 5) — every trophy with its official name, description and grade, a cited guide, a roadmap to the platinum and a missable audit.</p>
   </div>
-  <div class="header-progress">
-    <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
-    <p id="progress-text" class="progress-text">0 of 55 trophies · 0%</p>
-    <p class="saved-pill">Progress saved in this browser</p>
+  <div class="head-progress">
+    <div class="progress-bar" role="progressbar" aria-label="Overall trophy progress"><div id="progressFill"></div></div>
+    <p id="progressText">0 of 55 trophies · 0%</p>
+    <span class="saved-pill">Progress saved in this browser</span>
   </div>
 </header>
 
-<section class="controls" aria-label="Checklist controls">
+<section class="controls" aria-label="Tracker controls">
   <input id="search" type="search" placeholder="Search trophies…" aria-label="Search trophies">
   <div class="filters" role="group" aria-label="Filter by kind">
-    <button type="button" class="filter-btn active" data-filter="all">All</button>
+    <button type="button" class="filter-btn is-active" data-filter="all">All</button>
     <button type="button" class="filter-btn" data-filter="story">Story</button>
     <button type="button" class="filter-btn" data-filter="missable">Missable</button>
     <button type="button" class="filter-btn" data-filter="collectibles">Collectibles</button>
@@ -31,35 +31,37 @@
     <button type="button" class="filter-btn" data-filter="freeplay">Free roam</button>
     <button type="button" class="filter-btn" data-filter="platinum">Platinum</button>
   </div>
-  <button id="spoiler-btn" type="button" class="toggle-btn">Hide spoilers</button>
-  <button id="export-btn" type="button">Export</button>
-  <label class="import-label">Import <input id="import-file" type="file" accept="application/json"></label>
+  <button id="spoilerToggle" type="button" aria-pressed="true">Show spoilers</button>
+  <button id="exportBtn" type="button">Export</button>
+  <label class="import-btn">Import<input id="importFile" type="file" accept="application/json"></label>
 </section>
 
 <main>
-  <section id="roadmap" class="panel">
-    <h2>Roadmap to the platinum — 9 stages</h2>
-    <p class="panel-intro">The order matters more than the effort: missable strands and partner moments close as the story advances, so the roadmap front-loads everything the plot can take away, then sweeps the counters and collectibles once the map is fully open.</p>
-    <div id="roadmap-stages" class="stage-grid"></div>
+  <section id="roadmap" aria-labelledby="roadmapTitle">
+    <h2 id="roadmapTitle">Roadmap to the platinum — 9 stages</h2>
+    <p class="section-note">The order this atlas recommends: story first with the missables protected, then activities and collectibles, then the free-roam counters, and the platinum itself last. Every one of the 55 trophies appears in exactly one stage.</p>
+    <div id="stageGrid" class="stage-grid"></div>
   </section>
 
-  <section id="audit" class="panel">
-    <h2>Missable audit — 14 trophies</h2>
-    <p class="panel-intro">Every trophy that can be lost on a single save, with the condition that locks it. If a row here is not yet earned, read its warning before pushing the story forward.</p>
-    <div id="audit-rows"></div>
+  <section id="audit" aria-labelledby="auditTitle">
+    <h2 id="auditTitle">Missable audit — 14 trophies</h2>
+    <p class="section-note">Built from the official descriptions: these are the trophies a single playthrough can lose. Each note says what locks it, so you can clear it while the story still allows it.</p>
+    <div id="auditRows" class="audit-rows"></div>
   </section>
 
-  <section id="checklist" class="panel">
-    <h2>Trophy checklist</h2>
-    <p id="citation-audit" class="citation-audit"></p>
-    <p id="spoiler-note" class="spoiler-note">Spoiler protection is on: story trophies you have not earned yet are masked — names, descriptions and guides stay hidden until you earn them or switch spoilers off.</p>
-    <div id="rows"></div>
+  <p id="citationAudit" class="citation-audit">Citation audit — counting…</p>
+
+  <section id="checklist" aria-labelledby="checklistTitle">
+    <h2 id="checklistTitle">Trophy checklist — the official 55</h2>
+    <p id="spoilerNote" class="spoiler-note">Spoiler protection is on: story trophy names and guides are masked below, so the story cannot be spoiled at a glance. Use “Show spoilers” above to reveal them.</p>
+    <div id="rows" class="rows"></div>
+    <p id="noResults" class="no-results" hidden>No trophies match the current filter and search.</p>
   </section>
 </main>
 
-<footer>
-  <p><strong>Sources &amp; method.</strong> Trophy names, descriptions and grades are the official PlayStation list, carried in this app as kit data. Each guide is written in our own words for this atlas; its method is drawn from the sources named beside it — the official list, Exophase, PowerPyx, PSNProfiles, PlayStationTrophies.org, TrueTrophies, IGN, Game8, Push Square and Eurogamer — and, where a method is our own inference for an unreleased game, from the Leonida Platinum Atlas method note. No guide text is copied from any source.</p>
-  <p class="disclaimer">Unofficial fan-made tracker concept for an unreleased game.</p>
+<footer class="site-foot">
+  <p><strong>Sources &amp; method.</strong> Trophy names, descriptions and grades are the official list as shipped in this tracker's data file. Every guide is written in this atlas's own words from the trophy's name and official description; each trophy names the references its guide draws on — the official list, Exophase's trophy list, and the published guides of PowerPyx, PSNProfiles, PlayStationTrophies.org and TrueTrophies, with IGN, Game8, Push Square and Eurogamer — and any method we inferred ourselves is marked “Leonida Platinum Atlas method note”. The game is unreleased, so treat every method as a plan to confirm in play, not a promise.</p>
+  <p class="disclaimer">Unofficial fan-made tracker concept for an unreleased game. Not affiliated with Rockstar Games or PlayStation.</p>
 </footer>
 
 <script type="module" src="app.js"></script>

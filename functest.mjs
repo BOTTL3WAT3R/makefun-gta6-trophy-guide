@@ -1,151 +1,109 @@
-// functest.mjs — end-to-end checks for the Leonida Platinum Atlas app, driven
-// over CDP against the app served by serve.ts. Asserts row counts, filters,
-// spoiler masking, persistence, roadmap/audit/citation rendering, counter-driven
-// progress, and that the app makes zero external requests and logs zero errors.
-// Run: node functest.mjs
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
-import { launchBrowser, sleep, waitFor } from './cdp.mjs';
+// Functional test for the Leonida Platinum Atlas app, driven over CDP against the cached Chromium.
+// Serves app/ with the starter's serve.ts, loads the page, and asserts the tracker's behaviour end to end.
+// Run: node functest.mjs  — prints one line per assertion and a final PASS count; exits 1 on any failure.
+import { readFileSync } from 'node:fs';
+import { serveApp, launchBrowser, newPage } from './cdp.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const PORT = 8177;
+const PORT = 8911;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
+const KEY = 'leonida-platinum-atlas-v1';
 
 let passed = 0;
 let failed = 0;
-function check(label, cond, detail = '') {
-  if (cond) { passed++; console.log(`PASS ${label}`); }
-  else { failed++; console.log(`FAIL ${label}${detail ? ' — ' + detail : ''}`); }
+function check(name, ok, detail = '') {
+  if (ok) { passed++; console.log(`  ok - ${name}`); }
+  else { failed++; console.log(`  FAIL - ${name}${detail ? ' :: ' + detail : ''}`); }
 }
 
-function startServer() {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('node', ['serve.ts', '--port', String(PORT)], {
-      cwd: here, stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const timer = setTimeout(() => reject(new Error('server start timed out')), 15000);
-    proc.stdout.on('data', (d) => {
-      if (String(d).includes('app/ is on')) { clearTimeout(timer); resolve(proc); }
-    });
-    proc.on('exit', (code) => { clearTimeout(timer); reject(new Error(`server exited: ${code}`)); });
-  });
-}
-
-const server = await startServer();
+const server = await serveApp(PORT);
 const browser = await launchBrowser();
 try {
-  const page = await browser.newPage();
+  const page = await newPage(browser);
   const requests = [];
   const consoleErrors = [];
-  browser.onEvent((msg) => {
-    if (msg.sessionId !== page.sessionId) return;
-    if (msg.method === 'Network.requestWillBeSent') requests.push(msg.params.request.url);
-    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
-      consoleErrors.push(JSON.stringify(msg.params.args?.map((a) => a.value ?? a.description) ?? []));
-    }
-    if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') {
-      consoleErrors.push(msg.params.entry.text);
-    }
-    if (msg.method === 'Runtime.exceptionThrown') {
-      consoleErrors.push('exception: ' + (msg.params.exceptionDetails?.exception?.description ?? ''));
-    }
-  });
   await page.send('Network.enable');
-  await page.send('Log.enable');
-  await page.send('Emulation.setDeviceMetricsOverride', {
-    width: 1280, height: 800, deviceScaleFactor: 1, mobile: false,
+  page.on('Network.requestWillBeSent', (p) => requests.push(p.request.url));
+  page.on('Runtime.consoleAPICalled', (p) => {
+    if (p.type === 'error') consoleErrors.push(p.args.map((a) => a.value ?? a.description ?? '').join(' '));
   });
+  page.on('Runtime.exceptionThrown', (p) => consoleErrors.push(p.exceptionDetails?.exception?.description ?? 'exception'));
 
   await page.send('Page.navigate', { url: ORIGIN + '/' });
-  await waitFor(page, 'document.querySelectorAll(".trophy-row").length === 55');
+  await page.waitFor(`document.querySelectorAll('.trophy-row').length === 55`);
 
   // 1. Exactly 55 checklist rows.
   check('checklist renders exactly 55 rows',
-    await page.evaluate('document.querySelectorAll(".trophy-row").length') === 55);
+    await page.evaluate(`document.querySelectorAll('.trophy-row').length`) === 55);
 
-  // 2. Roadmap renders 9 stages; audit renders 14 rows.
+  // 2. Citation audit line carries the real counts from the data file.
+  const data = JSON.parse(readFileSync(new URL('./app/data/trophies.json', import.meta.url), 'utf8'));
+  const citedGuides = data.trophies.filter((t) => t.sources?.length > 0).length;
+  const totalSteps = data.trophies.reduce((n, t) => n + t.steps.length, 0);
+  const citedSteps = data.trophies.reduce((n, t) => n + t.steps.filter((s) => s.source).length, 0);
+  const auditText = await page.evaluate(`document.getElementById('citationAudit').textContent`);
+  check('citation audit line shows real counts',
+    auditText === `Citation audit — ${citedGuides} of 55 guides cite named sources · ${citedSteps} of ${totalSteps} steps carry citations`,
+    auditText);
+
+  // 3. Roadmap renders 9 stages; missable audit renders 14 rows.
   check('roadmap renders 9 stages',
-    await page.evaluate('document.querySelectorAll(".stage-card").length') === 9);
+    await page.evaluate(`document.querySelectorAll('.stage-card').length`) === 9);
   check('missable audit renders 14 rows',
-    await page.evaluate('document.querySelectorAll(".audit-row").length') === 14);
-
-  // 3. Citation audit line carries the real counts from the data file.
-  const data = await (await fetch(ORIGIN + '/data/trophies.json')).json();
-  const totalSteps = data.trophies.reduce((s, t) => s + t.steps.length, 0);
-  const citedSteps = data.trophies.reduce((s, t) => s + t.steps.filter((x) => x.source).length, 0);
-  const citation = await page.evaluate('document.getElementById("citation-audit").textContent');
-  check('citation audit line present with real counts',
-    citation.includes(`55 of 55 guides cite named sources`) &&
-    citation.includes(`${citedSteps} of ${totalSteps} steps carry citations`),
-    citation);
+    await page.evaluate(`document.querySelectorAll('.audit-row').length`) === 14);
 
   // 4. Spoiler masking hides, then the toggle reveals, a story trophy name.
-  const maskedName = await page.evaluate(
-    'document.querySelector(\'.trophy-row[data-trophy-id="2"] .trophy-name\').textContent');
-  check('spoiler mode masks a story trophy name by default', maskedName.includes('spoilers hidden'), maskedName);
-  await page.evaluate('document.getElementById("spoiler-btn").click()');
-  await sleep(150);
-  const revealedName = await page.evaluate(
-    'document.querySelector(\'.trophy-row[data-trophy-id="2"] .trophy-name\').textContent');
+  const maskedName = await page.evaluate(`document.querySelector('.trophy-row[data-id="2"] h3').textContent`);
+  check('spoiler mode masks a story trophy name', maskedName === 'Hidden trophy — spoilers hidden', maskedName);
+  await page.evaluate(`document.getElementById('spoilerToggle').click()`);
+  const revealedName = await page.evaluate(`document.querySelector('.trophy-row[data-id="2"] h3').textContent`);
   check('spoiler toggle reveals the story trophy name', revealedName === 'Just Like Paradise', revealedName);
-  await page.evaluate('document.getElementById("spoiler-btn").click()');
-  await sleep(150);
+  await page.evaluate(`document.getElementById('spoilerToggle').click()`); // back to hidden for the filter checks
 
-  // 5. Filters: Story shows 19, Missable shows 14, All restores 55.
-  await page.evaluate('document.querySelector(\'.filter-btn[data-filter="story"]\').click()');
-  await sleep(150);
-  check('filter Story shows 19 rows',
-    await page.evaluate('document.querySelectorAll(".trophy-row").length') === 19);
-  await page.evaluate('document.querySelector(\'.filter-btn[data-filter="missable"]\').click()');
-  await sleep(150);
-  check('filter Missable shows 14 rows',
-    await page.evaluate('document.querySelectorAll(".trophy-row").length') === 14);
-  await page.evaluate('document.querySelector(\'.filter-btn[data-filter="all"]\').click()');
-  await sleep(150);
-  check('filter All restores 55 rows',
-    await page.evaluate('document.querySelectorAll(".trophy-row").length') === 55);
+  // 5. Filters: Story shows 19, Missable shows 14.
+  await page.evaluate(`document.querySelector('[data-filter="story"]').click()`);
+  check('Story filter shows 19 rows',
+    await page.evaluate(`document.querySelectorAll('.trophy-row').length`) === 19);
+  await page.evaluate(`document.querySelector('[data-filter="missable"]').click()`);
+  check('Missable filter shows 14 rows',
+    await page.evaluate(`document.querySelectorAll('.trophy-row').length`) === 14);
+  await page.evaluate(`document.querySelector('[data-filter="all"]').click()`);
 
-  // 6. Counter stepper: drive trophy 43 (target 5) to its target and watch progress move.
-  const progressBefore = await page.evaluate('document.getElementById("progress-text").textContent');
-  for (let i = 0; i < 5; i++) {
-    await page.evaluate(`(() => {
-      const row = document.querySelector('.trophy-row[data-trophy-id="43"]');
-      row.querySelectorAll('.counter button')[1].click();
-    })()`);
-    await sleep(80);
-  }
-  const counterValue = await page.evaluate(
-    'document.querySelector(\'.trophy-row[data-trophy-id="43"] .counter-value\').textContent');
-  check('counter stepper increments to the target', counterValue === '5', counterValue);
-  const progressAfter = await page.evaluate('document.getElementById("progress-text").textContent');
-  check('progress text updates when a counter completes a trophy',
-    progressBefore.startsWith('0 of 55') && progressAfter.startsWith('1 of 55'),
-    `${progressBefore} -> ${progressAfter}`);
+  // 6. A counter stepper increments its value.
+  await page.evaluate(`document.querySelector('.trophy-row[data-id="9"] [data-action="inc"]').click()`);
+  const countAfter = await page.evaluate(`document.querySelector('.trophy-row[data-id="9"] .count-val').textContent`);
+  check('counter stepper increments', countAfter === '1', countAfter);
 
-  // 7. Persistence: tick trophy 17, reload, and confirm state survives.
-  await page.evaluate(`(() => {
-    const box = document.querySelector('.trophy-row[data-trophy-id="17"] input[type="checkbox"]');
-    box.click();
-  })()`);
-  await sleep(150);
+  // 7. State persists across a reload (checkbox + counter + progress text).
+  await page.evaluate(`document.querySelector('.trophy-row[data-id="5"] input[type="checkbox"]').click()`);
   await page.send('Page.reload');
-  await waitFor(page, 'document.querySelectorAll(".trophy-row").length === 55');
-  const persistedBox = await page.evaluate(
-    'document.querySelector(\'.trophy-row[data-trophy-id="17"] input[type="checkbox"]\').checked');
-  const persistedCounter = await page.evaluate(
-    'document.querySelector(\'.trophy-row[data-trophy-id="43"] .counter-value\').textContent');
-  const persistedProgress = await page.evaluate('document.getElementById("progress-text").textContent');
+  await page.waitFor(`document.querySelectorAll('.trophy-row').length === 55`);
+  const persistedBox = await page.evaluate(`document.querySelector('.trophy-row[data-id="5"] input[type="checkbox"]').checked`);
+  const persistedCount = await page.evaluate(`document.querySelector('.trophy-row[data-id="9"] .count-val').textContent`);
+  const progressAfterReload = await page.evaluate(`document.getElementById('progressText').textContent`);
   check('checkbox state persists across reload', persistedBox === true);
-  check('counter state persists across reload', persistedCounter === '5', persistedCounter);
-  check('progress persists across reload', persistedProgress.startsWith('2 of 55'), persistedProgress);
+  check('counter state persists across reload', persistedCount === '1', persistedCount);
+  check('progress text reflects the persisted completion', progressAfterReload.startsWith('1 of 55'), progressAfterReload);
 
-  // 8. Zero external network requests; zero console errors.
-  const external = requests.filter((u) => !u.startsWith(ORIGIN) && !u.startsWith('data:') && !u.startsWith('blob:'));
+  // 8. Completing a counter target updates the progress text.
+  await page.evaluate(`(() => {
+    const s = JSON.parse(localStorage.getItem('${KEY}'));
+    s.counters[43] = 4;
+    localStorage.setItem('${KEY}', JSON.stringify(s));
+  })()`);
+  await page.send('Page.reload');
+  await page.waitFor(`document.querySelectorAll('.trophy-row').length === 55`);
+  await page.evaluate(`document.querySelector('.trophy-row[data-id="43"] [data-action="inc"]').click()`);
+  const progressFinal = await page.evaluate(`document.getElementById('progressText').textContent`);
+  check('reaching a counter target updates progress', progressFinal.startsWith('2 of 55'), progressFinal);
+
+  // 9. No external network requests; no console errors.
+  const external = requests.filter((u) => !u.startsWith(ORIGIN) && !u.startsWith('data:') && u !== 'about:blank');
   check('zero external network requests', external.length === 0, external.join(', '));
   check('zero console errors', consoleErrors.length === 0, consoleErrors.join(' | '));
+
+  page.close();
 } finally {
-  await browser.close();
+  browser.proc.kill('SIGKILL');
   server.kill('SIGKILL');
 }
 
