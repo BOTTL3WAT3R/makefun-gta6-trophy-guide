@@ -13,6 +13,15 @@
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+//
+// Leonida Platinum Atlas (this entry): the app/ folder holds the full guide — all 55
+// trophies with cited own-words guides in app/data/trophies.json, a nine-stage roadmap,
+// a 14-trophy missable audit, spoiler masking, counters for the counted trophies, and
+// progress saved in the browser with export/import. The four screenshots show, in order,
+// the cover (header, progress, filters, roadmap), the roadmap with the missable audit,
+// the checklist mid-progress with its sources lines, and spoiler protection at work.
+// This hand-in program is the starter's, unchanged in behaviour: it copies app/ and
+// screenshots/ beside it to the output directory and writes the dossier there.
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

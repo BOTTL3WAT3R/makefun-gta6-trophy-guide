@@ -1,5 +1,1 @@
-[
-  { "file": "1-checklist.jpg", "path": "/", "viewport": { "width": 1280, "height": 800 } },
-  { "file": "2-silver.jpg", "path": "/", "grade": "silver", "viewport": { "width": 1280, "height": 800 } },
-  { "file": "3-bronze.jpg", "path": "/", "grade": "bronze", "scroll": 1400, "viewport": { "width": 1280, "height": 800 } }
-]
+[{"file":"1-cover.jpg","note":"Top of page: header with progress bar and saved-in-browser pill, search and filter controls, roadmap start.","path":"/","scroll":"top","viewport":{"height":800,"width":1280}},{"file":"2-roadmap.jpg","note":"The last roadmap stage cards with the missable audit section in the same frame.","path":"/","scroll":"roadmap-audit","viewport":{"height":800,"width":1280}},{"file":"3-audit.jpg","note":"Checklist mid-progress: seeded checks and counters (id 9 at 4 of 10), guide steps and Sources lines visible.","path":"/","scrollToRow":9,"seed":{"checked":[1,2,3],"counters":{"12":9,"9":4},"spoilersHidden":true},"viewport":{"height":800,"width":1280}},{"file":"4-spoiler.jpg","note":"Spoiler protection on: citation audit line, the masking note, and masked story trophy rows.","path":"/","scroll":"checklist","viewport":{"height":800,"width":1280}}]
