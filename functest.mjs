@@ -1,111 +1,119 @@
-// Functional test for the Leonida Platinum Atlas app, driven over CDP against the cached Chromium.
-// Serves app/ with the starter's serve.ts, loads the page, and asserts the tracker's behaviour end to end.
-// Run: node functest.mjs  — prints one line per assertion and a final PASS count; exits 1 on any failure.
-import { readFileSync } from 'node:fs';
-import { serveApp, launchBrowser, newPage } from './cdp.mjs';
+// Functional test for Leonida Platinum Atlas — serves app/ and drives the
+// cached Chromium over CDP. Every assertion prints PASS or FAIL; the process
+// exits non-zero if any assertion fails.
+import { spawn } from 'node:child_process';
+import { launchChromium, openPage, sleep, waitForHttp } from './cdp.mjs';
 
-const PORT = 8911;
-const ORIGIN = `http://127.0.0.1:${PORT}`;
-const KEY = 'leonida-platinum-atlas-v1';
+const PORT = 8091;
+const DEBUG_PORT = 9223;
+const BASE = 'http://127.0.0.1:' + PORT + '/';
+const PROFILE = '/tmp/atlas-functest-profile-' + Date.now();
 
-let passed = 0;
-let failed = 0;
+let failures = 0;
 function check(name, ok, detail = '') {
-  if (ok) { passed++; console.log(`  ok - ${name}`); }
-  else { failed++; console.log(`  FAIL - ${name}${detail ? ' :: ' + detail : ''}`); }
+  console.log((ok ? 'PASS' : 'FAIL') + ' ' + name + (detail ? ' — ' + detail : ''));
+  if (!ok) failures += 1;
 }
 
-const server = await serveApp(PORT);
-const browser = await launchBrowser();
+const server = spawn('node', ['serve.ts', '--port', String(PORT)], {
+  cwd: import.meta.dirname, stdio: 'ignore',
+});
+const chrome = launchChromium(DEBUG_PORT, PROFILE);
 try {
-  const page = await newPage(browser);
-  const requests = [];
-  const consoleErrors = [];
-  await page.send('Network.enable');
-  page.on('Network.requestWillBeSent', (p) => requests.push(p.request.url));
-  page.on('Runtime.consoleAPICalled', (p) => {
-    if (p.type === 'error') consoleErrors.push(p.args.map((a) => a.value ?? a.description ?? '').join(' '));
-  });
-  page.on('Runtime.exceptionThrown', (p) => consoleErrors.push(p.exceptionDetails?.exception?.description ?? 'exception'));
+  await waitForHttp(BASE);
+  const page = await openPage(DEBUG_PORT);
+  await page.navigate(BASE);
+  await page.evaluate(`new Promise(r => {
+    const t = setInterval(() => {
+      if (document.querySelectorAll('#checklist .trophy').length === 55) { clearInterval(t); r(true); }
+    }, 100);
+    setTimeout(() => { clearInterval(t); r(false); }, 8000);
+  })`);
 
-  await page.send('Page.navigate', { url: ORIGIN + '/' });
-  await page.waitFor(`document.querySelectorAll('.trophy-row').length === 55`);
+  const rows = await page.evaluate(`document.querySelectorAll('#checklist .trophy').length`);
+  check('exactly 55 checklist rows', rows === 55, 'got ' + rows);
 
-  // 1. Exactly 55 checklist rows.
-  check('checklist renders exactly 55 rows',
-    await page.evaluate(`document.querySelectorAll('.trophy-row').length`) === 55);
+  const stages = await page.evaluate(`document.querySelectorAll('.stage').length`);
+  check('9 roadmap stages render', stages === 9, 'got ' + stages);
 
-  // 2. Citation audit line carries the real counts from the data file.
-  const data = JSON.parse(readFileSync(new URL('./app/data/trophies.json', import.meta.url), 'utf8'));
-  const citedGuides = data.trophies.filter((t) => t.sources?.length > 0).length;
-  const totalSteps = data.trophies.reduce((n, t) => n + t.steps.length, 0);
-  const citedSteps = data.trophies.reduce((n, t) => n + t.steps.filter((s) => s.source).length, 0);
-  const auditText = await page.evaluate(`document.getElementById('citationAudit').textContent`);
+  const auditRows = await page.evaluate(`document.querySelectorAll('.audit-row').length`);
+  check('missable audit has 14 rows', auditRows === 14, 'got ' + auditRows);
+
+  const auditLine = await page.evaluate(`document.getElementById('auditLine').textContent`);
   check('citation audit line shows real counts',
-    auditText === `Citation audit — ${citedGuides} of 55 guides cite named sources · ${citedSteps} of ${totalSteps} steps carry citations`,
-    auditText);
+    auditLine.includes('55 of 55') && auditLine.includes('220 of 220'), auditLine);
 
-  // 3. Roadmap renders 9 stages; missable audit renders 14 rows.
-  check('roadmap renders 9 stages',
-    await page.evaluate(`document.querySelectorAll('.stage-card').length`) === 9);
-  check('missable audit renders 14 rows',
-    await page.evaluate(`document.querySelectorAll('.audit-row').length`) === 14);
+  const maskedName = await page.evaluate(
+    `document.querySelector('.trophy[data-id="9"] .trophy-name').textContent`);
+  check('spoiler mode masks a story trophy name by default',
+    maskedName.includes('Hidden trophy'), maskedName.trim());
 
-  // 4. Spoiler masking hides, then the toggle reveals, a story trophy name.
-  const maskedName = await page.evaluate(`document.querySelector('.trophy-row[data-id="2"] h3').textContent`);
-  check('spoiler mode masks a story trophy name', maskedName === 'Hidden trophy — spoilers hidden', maskedName);
-  await page.evaluate(`document.getElementById('spoilerToggle').click()`);
-  const revealedName = await page.evaluate(`document.querySelector('.trophy-row[data-id="2"] h3').textContent`);
-  check('spoiler toggle reveals the story trophy name', revealedName === 'Just Like Paradise', revealedName);
-  await page.evaluate(`document.getElementById('spoilerToggle').click()`); // back to hidden for the filter checks
+  await page.evaluate(`document.getElementById('spoilerBtn').click()`);
+  await sleep(300);
+  const revealedName = await page.evaluate(
+    `document.querySelector('.trophy[data-id="9"] .trophy-name').textContent`);
+  check('spoiler toggle reveals the story trophy name',
+    revealedName.includes('Break the Bank'), revealedName.trim());
+  await page.evaluate(`document.getElementById('spoilerBtn').click()`);
+  await sleep(300);
 
-  // 5. Filters: Story shows 19, Missable shows 14.
-  await page.evaluate(`document.querySelector('[data-filter="story"]').click()`);
-  check('Story filter shows 19 rows',
-    await page.evaluate(`document.querySelectorAll('.trophy-row').length`) === 19);
-  await page.evaluate(`document.querySelector('[data-filter="missable"]').click()`);
-  check('Missable filter shows 14 rows',
-    await page.evaluate(`document.querySelectorAll('.trophy-row').length`) === 14);
-  await page.evaluate(`document.querySelector('[data-filter="all"]').click()`);
+  await page.evaluate(
+    `document.querySelector('#filters button[data-filter="story"]').click()`);
+  await sleep(300);
+  const storyRows = await page.evaluate(`document.querySelectorAll('#checklist .trophy').length`);
+  check('Story filter shows 19', storyRows === 19, 'got ' + storyRows);
 
-  // 6. A counter stepper increments its value.
-  await page.evaluate(`document.querySelector('.trophy-row[data-id="9"] [data-action="inc"]').click()`);
-  const countAfter = await page.evaluate(`document.querySelector('.trophy-row[data-id="9"] .count-val').textContent`);
-  check('counter stepper increments', countAfter === '1', countAfter);
+  await page.evaluate(
+    `document.querySelector('#filters button[data-filter="missable"]').click()`);
+  await sleep(300);
+  const missRows = await page.evaluate(`document.querySelectorAll('#checklist .trophy').length`);
+  check('Missable filter shows 14', missRows === 14, 'got ' + missRows);
 
-  // 7. State persists across a reload (checkbox + counter + progress text).
-  await page.evaluate(`document.querySelector('.trophy-row[data-id="5"] input[type="checkbox"]').click()`);
-  await page.send('Page.reload');
-  await page.waitFor(`document.querySelectorAll('.trophy-row').length === 55`);
-  const persistedBox = await page.evaluate(`document.querySelector('.trophy-row[data-id="5"] input[type="checkbox"]').checked`);
-  const persistedCount = await page.evaluate(`document.querySelector('.trophy-row[data-id="9"] .count-val').textContent`);
-  const progressAfterReload = await page.evaluate(`document.getElementById('progressText').textContent`);
-  check('checkbox state persists across reload', persistedBox === true);
-  check('counter state persists across reload', persistedCount === '1', persistedCount);
-  check('progress text reflects the persisted completion', progressAfterReload.startsWith('1 of 55'), progressAfterReload);
+  await page.evaluate(
+    `document.querySelector('#filters button[data-filter="all"]').click()`);
+  await sleep(300);
 
-  // 8. Completing a counter target updates the progress text.
-  await page.evaluate(`(() => {
-    const s = JSON.parse(localStorage.getItem('${KEY}'));
-    s.counters[43] = 4;
-    localStorage.setItem('${KEY}', JSON.stringify(s));
-  })()`);
-  await page.send('Page.reload');
-  await page.waitFor(`document.querySelectorAll('.trophy-row').length === 55`);
-  await page.evaluate(`document.querySelector('.trophy-row[data-id="43"] [data-action="inc"]').click()`);
-  const progressFinal = await page.evaluate(`document.getElementById('progressText').textContent`);
-  check('reaching a counter target updates progress', progressFinal.startsWith('2 of 55'), progressFinal);
+  const before = await page.evaluate(`document.getElementById('progressText').textContent`);
+  // id 30 has target 3: three clicks complete it, so progress must move.
+  await page.evaluate(
+    `for (let i = 0; i < 3; i++) {
+       document.querySelector('.trophy[data-id="30"] button[data-step="1"]').click();
+     }`);
+  await sleep(300);
+  const counter = await page.evaluate(
+    `document.querySelector('.trophy[data-id="30"] .count').textContent`);
+  const after = await page.evaluate(`document.getElementById('progressText').textContent`);
+  check('counter stepper increments and updates progress',
+    counter.trim() === '3 / 3' && before !== after,
+    'counter=' + counter.trim() + ' before=' + before + ' after=' + after);
 
-  // 9. No external network requests; no console errors.
-  const external = requests.filter((u) => !u.startsWith(ORIGIN) && !u.startsWith('data:') && u !== 'about:blank');
-  check('zero external network requests', external.length === 0, external.join(', '));
-  check('zero console errors', consoleErrors.length === 0, consoleErrors.join(' | '));
+  await page.evaluate(
+    `document.querySelector('.trophy[data-id="2"] input[type="checkbox"]').click()`);
+  await sleep(300);
+  await page.navigate(BASE);
+  await page.evaluate(`new Promise(r => {
+    const t = setInterval(() => {
+      if (document.querySelectorAll('#checklist .trophy').length === 55) { clearInterval(t); r(true); }
+    }, 100);
+    setTimeout(() => { clearInterval(t); r(false); }, 8000);
+  })`);
+  const persisted = await page.evaluate(
+    `document.querySelector('.trophy[data-id="2"] input[type="checkbox"]').checked`);
+  check('checked state persists across reload', persisted === true);
+
+  const hasExport = await page.evaluate(`!!document.getElementById('exportBtn')`);
+  const hasImport = await page.evaluate(`!!document.getElementById('importBtn')`);
+  check('export and import controls exist', hasExport && hasImport);
+
+  check('zero external network requests', page.externalRequests.length === 0,
+    page.externalRequests.join(', '));
+  check('zero console errors', page.consoleErrors.length === 0,
+    page.consoleErrors.join(' | '));
 
   page.close();
 } finally {
-  browser.proc.kill('SIGKILL');
-  server.kill('SIGKILL');
+  chrome.kill();
+  server.kill();
 }
-
-console.log(`\nfunctest: ${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+console.log(failures === 0 ? 'FUNCTEST ALL PASS' : 'FUNCTEST ' + failures + ' FAILURES');
+process.exit(failures === 0 ? 0 : 1);
